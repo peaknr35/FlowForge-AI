@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { createClient } from '@/lib/supabase/server';
 import { apiRateLimit, getRateLimitHeaders } from '@/lib/rate-limit';
 import { sanitizeString } from '@/lib/sanitize';
 
@@ -30,18 +31,24 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Authenticate user — derive userId from session, not request body
+  const supabase = await createClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return NextResponse.json(
+      { error: 'Authentication required' },
+      { status: 401 }
+    );
+  }
+
   try {
     const body = await req.json();
     const rawPriceId = sanitizeString(body.priceId, 128);
-    const rawUserId = sanitizeString(body.userId, 128);
     const rawPlan = sanitizeString(body.plan, 64);
 
-    if (!rawUserId) {
-      return NextResponse.json(
-        { error: 'Missing userId' },
-        { status: 400 }
-      );
-    }
+    // Use authenticated user ID, not client-provided userId
+    const userId = user.id;
 
     const resolvedPriceId = rawPriceId || (rawPlan && PRICE_IDS[rawPlan as PlanKey]);
 
@@ -58,7 +65,7 @@ export async function POST(req: NextRequest) {
       mode: isLifetime ? 'payment' : 'subscription',
       payment_method_types: ['card'],
       line_items: [{ price: resolvedPriceId, quantity: 1 }],
-      client_reference_id: rawUserId,
+      client_reference_id: userId,
       success_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard?success=true`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/pricing?canceled=true`,
       metadata: {

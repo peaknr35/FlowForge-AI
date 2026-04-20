@@ -3,17 +3,31 @@ import { createClient } from '@/lib/supabase/server';
 import { AGENT_CONFIG, AGENTS_BY_TIER, type AgentTier } from '@/lib/prompts';
 import { callAgent } from '@/lib/claude';
 import { sanitizeUserInput } from '@/lib/sanitize';
+import { apiRateLimit, getRateLimitHeaders } from '@/lib/rate-limit';
 
-interface AgentRequestBody {
-  input: string;
-  context?: Record<string, unknown>;
-  tierOverride?: string;
-}
+const MAX_REQUEST_SIZE = 102400; // 100KB
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ agent: string }> }
 ) {
+  // Rate limit check
+  if (apiRateLimit(request)) {
+    return NextResponse.json(
+      { success: false, error: 'Rate limit exceeded. Please try again later.' },
+      { status: 429, headers: getRateLimitHeaders(request, 30) }
+    );
+  }
+
+  // Request size check
+  const contentLength = request.headers.get('content-length');
+  if (contentLength && parseInt(contentLength, 10) > MAX_REQUEST_SIZE) {
+    return NextResponse.json(
+      { success: false, error: 'Request too large' },
+      { status: 413 }
+    );
+  }
+
   const { agent: agentId } = await params;
 
   // Validate agent exists
@@ -58,8 +72,8 @@ export async function POST(
     );
   }
 
-  // Parse and validate input
-  let body: AgentRequestBody;
+  // Parse and validate input — only accept the 'input' field
+  let body: { input: string };
   try {
     body = await request.json();
   } catch {
@@ -77,6 +91,12 @@ export async function POST(
   }
 
   const sanitizedInput = sanitizeUserInput(body.input);
+  if (!sanitizedInput) {
+    return NextResponse.json(
+      { success: false, error: 'Input is too short (minimum 10 characters)' },
+      { status: 400 }
+    );
+  }
   if (sanitizedInput.length > 10000) {
     return NextResponse.json(
       { success: false, error: 'Input exceeds maximum length of 10,000 characters' },
@@ -84,23 +104,14 @@ export async function POST(
     );
   }
 
-  // Build the prompt
-  const systemPrompt = agentConfig.systemPrompt;
-  const userPrompt = sanitizedInput;
-
-  // Determine model (Ollama-first, Claude API path for future)
-  const model = agentConfig.ollamaModel;
-  const maxTokens = agentConfig.maxTokens;
-
   // Call AI
   const startTime = Date.now();
   let result: { text: string; inputTokens: number; outputTokens: number };
   try {
-    result = await callAgent(systemPrompt, userPrompt, model, maxTokens);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'AI generation failed';
+    result = await callAgent(agentConfig.systemPrompt, sanitizedInput, agentConfig.ollamaModel, agentConfig.maxTokens);
+  } catch {
     return NextResponse.json(
-      { success: false, error: message },
+      { success: false, error: 'AI generation failed. Please try again.' },
       { status: 500 }
     );
   }
@@ -113,10 +124,10 @@ export async function POST(
     module_name: `agent:${agentId}`,
     input_text: sanitizedInput,
     output_text: result.text,
-    model_used: model,
+    model_used: agentConfig.ollamaModel,
     input_tokens: result.inputTokens,
     output_tokens: result.outputTokens,
-    cost_usd: 0, // Ollama is free
+    cost_usd: 0,
   });
 
   return NextResponse.json({
@@ -125,7 +136,7 @@ export async function POST(
       agent: agentId,
       phase: agentConfig.phase,
       output: result.text,
-      model,
+      model: agentConfig.ollamaModel,
       durationMs,
       slashCommand: agentConfig.slashCommand,
     },
@@ -136,6 +147,14 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ agent: string }> }
 ) {
+  // Rate limit check
+  if (apiRateLimit(request)) {
+    return NextResponse.json(
+      { success: false, error: 'Rate limit exceeded' },
+      { status: 429 }
+    );
+  }
+
   const { agent: agentId } = await params;
 
   // Authenticate user

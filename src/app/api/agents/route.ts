@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { AGENT_CONFIG, AGENTS_BY_TIER, type AgentTier } from '@/lib/prompts';
+import { apiRateLimit } from '@/lib/rate-limit';
 
 export async function GET(request: NextRequest) {
+  // Rate limit check
+  if (apiRateLimit(request)) {
+    return NextResponse.json(
+      { success: false, error: 'Rate limit exceeded' },
+      { status: 429 }
+    );
+  }
   // Authenticate user
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
