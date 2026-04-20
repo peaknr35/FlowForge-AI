@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-bg-base: #0a0a0f;
+  --color-bg-surface: #111118;
+  --color-bg-surface-2: #1a1a24;
+  --color-bg-elevated: #22222e;
+
+  --color-border-default: rgba(255,255,255,0.06);
+  --color-border-subtle: rgba(255,255,255,0.04);
+  --color-border-active: rgba(0,212,170,0.3);
+
+  --color-text-primary: #f0f0f5;
+  --color-text-secondary: #8b8b9e;
+  --color-text-tertiary: #55556a;
+
+  --color-accent: #00d4aa;
+  --color-accent-glow: rgba(0,212,170,0.12);
+  --color-accent-soft: rgba(0,212,170,0.06);
+  --color-accent-text: #00ffcc;
+
+  --color-green-badge: #16a34a;
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --radius-card: 12px;
+  --radius-card-lg: 16px;
+}
+
+* {
+  border-color: var(--color-border-default);
+}
+
+body {
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Aurora glow — only behind hero heading */
+.aurora-glow {
+  position: relative;
+}
+.aurora-glow::before {
+  content: '';
+  position: absolute;
+  top: -40%;
+  left: 10%;
+  right: 10%;
+  height: 80%;
+  background: radial-gradient(
+    ellipse 60% 40% at 50% 0%,
+    rgba(0,212,170,0.10) 0%,
+    rgba(0,212,170,0.03) 40%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+.aurora-glow > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.03) 25%,
+    rgba(255,255,255,0.08) 50%,
+    rgba(255,255,255,0.03) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+  border-radius: 6px;
+}
+
+/* 3D tilt for product demo card */
+.product-card-3d {
+  transform: perspective(1000px) rotateY(-5deg) rotateX(2deg);
+  box-shadow: 0 40px 80px rgba(0,0,0,0.4);
+  transition: transform 400ms cubic-bezier(0.4,0,0.2,1);
+}
+.product-card-3d:hover {
+  transform: perspective(1000px) rotateY(-2deg) rotateX(1deg);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #050505;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.15);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.08) #050505;
+}
+
+/* Canvas smooth scroll */
+html {
+  scroll-behavior: smooth;
+}

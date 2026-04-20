@@ -1,0 +1,42 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+
+# env files
+.env
+.env.local
+.env*.local
+
+# google oauth credentials
+client_secret_*.json
+secrets/
+
+# debug
+npm-debug.log*
+
+# misc
+.DS_Store
+*.pem
+
+# stripe cli
+/tmp/
+
+# large files & downloaded assets
+*.pdf
+*.xlsx
+stripe_backup_code.txt
+
+# downloaded skill packs (not part of source)
+claude-skills-devops/
+claude-skills-for-pms/
+claude-skills-founders/
+claude-skills-marketing/
+claude-skills-security/
+claude-skills-ui-polish/
+Image-Generator-*/
+Website-Intelligence-*/
+Spline Skill*/
+*🌍 Spline Skill*/
