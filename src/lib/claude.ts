@@ -1,14 +1,20 @@
+/**
+ * Legacy API compatibility layer
+ * Routes to src/lib/inference.ts for Ollama + Anthropic fallback
+ *
+ * This file is maintained for backwards compatibility.
+ * New code should prefer: import { callAI, callAIStream } from '@/lib/inference'
+ */
+
+import { callAI as callAIBase, callAIStream as callAIStreamBase, AIResponse } from './inference';
 import { SYSTEM_PROMPTS, MODULE_CONFIG } from './prompts';
 
-export interface AIResponse {
-  text: string;
-  inputTokens: number;
-  outputTokens: number;
-  model: string;
-}
+export { AIResponse };
 
-const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-
+/**
+ * Call AI for a specific module
+ * Automatically routes to Ollama or Anthropic based on availability
+ */
 export async function callAI(
   moduleName: string,
   userInput: string,
@@ -20,43 +26,11 @@ export async function callAI(
   const systemPrompt = SYSTEM_PROMPTS[moduleName];
   if (!systemPrompt) throw new Error(`No system prompt for module: ${moduleName}`);
 
-  const model = overrideModel || config.ollamaModel || config.model;
-
-  const response = await fetch(`${OLLAMA_BASE_URL}/v1/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      max_tokens: config.maxTokens,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userInput },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Ollama API error (${response.status}): ${errorText}`);
-  }
-
-  const data = await response.json();
-  const choice = data.choices?.[0];
-  const text = choice?.message?.content || '';
-
-  return {
-    text,
-    inputTokens: data.usage?.prompt_tokens || 0,
-    outputTokens: data.usage?.completion_tokens || 0,
-    model,
-  };
+  return callAIBase(moduleName, userInput, config, systemPrompt, overrideModel);
 }
 
-export const callClaude = callAI;
-
 /**
- * Call an AI agent directly with custom system prompt and model.
- * Unlike callAI which uses MODULE_CONFIG, this accepts explicit parameters.
+ * Call an AI agent directly
  */
 export async function callAgent(
   systemPrompt: string,
@@ -64,32 +38,54 @@ export async function callAgent(
   model: string = 'qwen3:latest',
   maxTokens: number = 4096
 ): Promise<AIResponse> {
-  const response = await fetch(`${OLLAMA_BASE_URL}/v1/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userInput },
-      ],
-    }),
-  });
+  // Map legacy Ollama model to Anthropic equivalent
+  const claudeModel = mapOllamaModelToClaude(model);
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Ollama API error (${response.status}): ${errorText}`);
-  }
-
-  const data = await response.json();
-  const choice = data.choices?.[0];
-  const text = choice?.message?.content || '';
-
-  return {
-    text,
-    inputTokens: data.usage?.prompt_tokens || 0,
-    outputTokens: data.usage?.completion_tokens || 0,
-    model,
-  };
+  return callAIBase(
+    'agent',
+    userInput,
+    { ollamaModel: model, claudeModel, maxTokens },
+    systemPrompt
+  );
 }
+
+/**
+ * Stream version of callAgent
+ */
+export async function callAgentStream(
+  systemPrompt: string,
+  userInput: string,
+  model: string = 'qwen3:latest',
+  maxTokens: number = 4096,
+  onChunk: (chunk: string) => void
+): Promise<AIResponse> {
+  // Map legacy Ollama model to Anthropic equivalent
+  const claudeModel = mapOllamaModelToClaude(model);
+
+  return callAIStreamBase(
+    'agent',
+    userInput,
+    { ollamaModel: model, claudeModel, maxTokens },
+    systemPrompt,
+    onChunk
+  );
+}
+
+/**
+ * Map Ollama model names to equivalent Anthropic models
+ */
+function mapOllamaModelToClaude(ollamaModel: string): string {
+  const mapping: Record<string, string> = {
+    'qwen3:latest': 'claude-sonnet-4-5-20250514',
+    'qwen3.5:latest': 'claude-haiku-4-5-20251001',
+    'llama2': 'claude-sonnet-4-5-20250514',
+    'mistral': 'claude-haiku-4-5-20251001',
+    'neural-chat': 'claude-haiku-4-5-20251001',
+  };
+  return mapping[ollamaModel] || 'claude-sonnet-4-5-20250514';
+}
+
+/**
+ * Backwards compatibility exports
+ */
+export { callAgent as callClaude };
